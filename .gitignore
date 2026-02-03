@@ -1,3 +1,40 @@
+# Runtime files
+.llamacpp-server.log
+.llamacpp-server.pid
+.vllm-server.log
+.vllm-server.pid
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Dependencies (built/cloned during setup)
+llama.cpp/
+
+# Models (downloaded during setup)
+models/
+
+# IDE/Tool config
+.serena/
+.vscode/
+.idea/
+.playwright/
+.playwright-mcp/
+
+# OS files
+.DS_Store
+
+# Planning files (local only)
+docs/plans/
+task_plan.md
+findings.md
+progress.md
+AGENTS.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -48,7 +85,6 @@ coverage.xml
 *.cover
 *.py.cover
 .hypothesis/
-.pytest_cache/
 cover/
 
 # Translations
@@ -119,7 +155,7 @@ ipython_config.py
 
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
+#   pixi.lock
 #   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
 #   in the .venv directory. It is recommended not to include this directory in version control.
 .pixi
