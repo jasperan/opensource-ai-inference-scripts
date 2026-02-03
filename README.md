@@ -58,6 +58,18 @@ python setup.py status       # Show what's installed and running
 | gpt-oss:20b | 12GB | 32K |
 | nemotron-3-nano:30b | 18GB | 32K |
 
+## Models Requiring >24GB VRAM (Larger than A10)
+
+These models are too large for a single A10 GPU (24GB) but are worth tracking for larger setups:
+
+| Model | Architecture | 4-bit Size | 8-bit Size | Notes |
+|-------|--------------|------------|------------|-------|
+| **Qwen3-Coder-Next** | 80B MoE (3B active) | 46GB | 85GB | Best-in-class coding model, 262K context. HF: `unsloth/Qwen3-Coder-Next-GGUF` |
+| **Step-3.5-Flash** | 309B MoE | ~40GB | ~80GB | StepFun's fast reasoning model, 256K context |
+| **GLM-4-32B** | 32B dense | ~18GB | ~34GB | Full GLM-4 (not Flash variant), 128K context |
+
+*Note: These models may work with CPU offloading or multi-GPU setups. Check quantization options (UD-Q4_K_XL, Q3, etc.) for lower memory variants.*
+
 ## Supported Clients
 
 | Client | Description |
