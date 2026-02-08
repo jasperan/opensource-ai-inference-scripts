@@ -127,6 +127,12 @@ BACKENDS = {
                 "context": 131072,
             },
             {
+                "id": "qwen3-coder-next:latest",
+                "name": "Qwen3 Coder Next (80B MoE)",
+                "size_gb": 52,
+                "context": 262144,
+            },
+            {
                 "id": "gpt-oss:20b",
                 "name": "GPT-OSS 20B",
                 "size_gb": 12,

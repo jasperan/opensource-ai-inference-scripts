@@ -14,7 +14,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LLAMA_CPP_DIR="${SCRIPT_DIR}/llama.cpp"
 MODEL_DIR="${SCRIPT_DIR}/models"
-MODEL_FILE="${MODEL_DIR}/GLM-4.7-Flash-GGUF/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
+MODEL_FILE=""          # resolved interactively or via LLAMACPP_MODEL_FILE
 LLAMA_SERVER="${LLAMA_CPP_DIR}/llama-server"
 
 # Server configuration
@@ -36,6 +36,86 @@ IDLE_TIMEOUT="${LLAMACPP_IDLE_TIMEOUT:-300}"     # Seconds before idle model unl
 LOG_FILE="${SCRIPT_DIR}/.llamacpp-server.log"
 PID_FILE="${SCRIPT_DIR}/.llamacpp-server.pid"
 
+# ─── Interactive model selection ────────────────────────────────────────────
+select_gguf_model() {
+    local gguf_files=()
+    while IFS= read -r -d '' f; do
+        gguf_files+=("$f")
+    done < <(find "$MODEL_DIR" -name "*.gguf" -print0 2>/dev/null | sort -z)
+
+    if [[ ${#gguf_files[@]} -eq 0 ]]; then
+        echo "No GGUF models found in $MODEL_DIR"
+        echo "Run './setup.py install' to download models."
+        exit 1
+    fi
+
+    if [[ ${#gguf_files[@]} -eq 1 ]]; then
+        MODEL_FILE="${gguf_files[0]}"
+        echo "Auto-selected model: $(basename "$MODEL_FILE")"
+        return
+    fi
+
+    echo ""
+    echo "Available GGUF models:"
+    echo ""
+    printf "  \033[1m%-4s %-50s %s\033[0m\n" "#" "Model" "Size"
+    printf "  %-4s %-50s %s\n"               "───" "──────────────────────────────────────────────────" "──────"
+
+    for i in "${!gguf_files[@]}"; do
+        local f="${gguf_files[$i]}"
+        local name
+        name="$(basename "$f")"
+        local size_bytes
+        size_bytes=$(stat --printf="%s" "$f" 2>/dev/null || stat -f "%z" "$f" 2>/dev/null || echo 0)
+        local size_gb
+        size_gb=$(awk "BEGIN {printf \"%.1f\", $size_bytes / 1073741824}")
+        printf "  %-4s %-50s %sGB\n" "$((i+1))." "$name" "$size_gb"
+    done
+
+    echo ""
+    read -rp "Select model [1]: " choice
+    choice="${choice:-1}"
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#gguf_files[@]} )); then
+        MODEL_FILE="${gguf_files[$((choice-1))]}"
+    else
+        echo "Invalid selection, using first model."
+        MODEL_FILE="${gguf_files[0]}"
+    fi
+
+    echo "  → $(basename "$MODEL_FILE")"
+    echo ""
+}
+
+# Resolve MODEL_FILE: env override > interactive > default
+resolve_model_file() {
+    # Allow env override for scripted use
+    if [[ -n "${LLAMACPP_MODEL_FILE:-}" ]]; then
+        MODEL_FILE="$LLAMACPP_MODEL_FILE"
+        return
+    fi
+
+    local default_file="${MODEL_DIR}/GLM-4.7-Flash-GGUF/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
+
+    if [[ -t 0 && -d "$MODEL_DIR" ]]; then
+        select_gguf_model
+    elif [[ -f "$default_file" ]]; then
+        MODEL_FILE="$default_file"
+    else
+        # Try to find any GGUF
+        MODEL_FILE=$(find "$MODEL_DIR" -name "*.gguf" 2>/dev/null | head -1)
+        if [[ -z "$MODEL_FILE" ]]; then
+            echo "No GGUF models found. Run './setup.py install' first."
+            exit 1
+        fi
+    fi
+
+    # Derive alias from filename
+    local basename_noext
+    basename_noext="$(basename "$MODEL_FILE" .gguf)"
+    MODEL_ALIAS="$basename_noext"
+}
+
 print_header() {
     local client_display=$(echo "$CLIENT" | tr '[:lower:]' '[:upper:]')
     echo ""
@@ -52,7 +132,7 @@ check_prereqs() {
         exit 1
     fi
 
-    # In router mode, check models directory; in single mode, check specific model file
+    # In router mode, check models directory; in single mode, resolve and check model file
     if [[ "$ROUTER_MODE" == "1" ]]; then
         if [[ ! -d "$MODEL_DIR" ]]; then
             echo "Error: Models directory not found at $MODEL_DIR"
@@ -67,6 +147,10 @@ check_prereqs() {
             exit 1
         fi
     else
+        # Resolve model file interactively if not set
+        if [[ -z "$MODEL_FILE" ]]; then
+            resolve_model_file
+        fi
         if [[ ! -f "$MODEL_FILE" ]]; then
             echo "Error: Model file not found at $MODEL_FILE"
             echo "Run './setup_llamacpp.sh model' to download the model"

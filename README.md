@@ -55,6 +55,7 @@ python setup.py status       # Show what's installed and running
 |-------|------|---------|
 | glm-4.7-flash:latest | 9GB | 128K |
 | qwen3-coder:latest | 5GB | 128K |
+| qwen3-coder-next:latest | 52GB | 256K |
 | gpt-oss:20b | 12GB | 32K |
 | nemotron-3-nano:30b | 18GB | 32K |
 
@@ -64,7 +65,7 @@ These models are too large for a single A10 GPU (24GB) but are worth tracking fo
 
 | Model | Architecture | 4-bit Size | 8-bit Size | Notes |
 |-------|--------------|------------|------------|-------|
-| **Qwen3-Coder-Next** | 80B MoE (3B active) | 46GB | 85GB | Best-in-class coding model, 262K context. HF: `unsloth/Qwen3-Coder-Next-GGUF` |
+| **Qwen3-Coder-Next** | 80B MoE (3B active) | 46GB | 85GB | Best-in-class coding model, 262K context. Ollama: `qwen3-coder-next:latest` (52GB), cloud: `qwen3-coder-next:cloud`. HF: `unsloth/Qwen3-Coder-Next-GGUF` |
 | **Step-3.5-Flash** | 309B MoE | ~40GB | ~80GB | StepFun's fast reasoning model, 256K context |
 | **GLM-4-32B** | 32B dense | ~18GB | ~34GB | Full GLM-4 (not Flash variant), 128K context |
 

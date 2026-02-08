@@ -20,16 +20,16 @@ Commands:
 
 Options:
   --backend <name>     Backend: ollama or vllm            (default: $BACKEND)
-  --model <id>         Model ID override
-                         ollama default: glm-4.7-flash:latest
-                         vllm   default: Qwen/Qwen3-8B
+  --model <id>         Model ID (skip interactive picker)
   --ollama-host <url>  Ollama base URL                    (default: $OLLAMA_HOST)
   --vllm-host <url>    vLLM base URL                      (default: $VLLM_HOST)
   -h, --help           Show this help
 
+If --model is omitted, an interactive model picker is shown.
+
 Examples:
-  ./run_crush.sh                                    # Ollama + default model
-  ./run_crush.sh --backend vllm                     # vLLM + Qwen3-8B
+  ./run_crush.sh                                    # Interactive model picker
+  ./run_crush.sh --backend vllm                     # Interactive vLLM model picker
   ./run_crush.sh --model nemotron-3-nano:30b        # Ollama + specific model
   ./run_crush.sh config --backend vllm              # Write config only
   ./run_crush.sh install                            # Install Crush
@@ -55,13 +55,76 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# ─── Interactive model selection ────────────────────────────────────────────
+# Each entry: "model_id|display_name|size|context"
+OLLAMA_MODELS=(
+    "glm-4.7-flash:latest|GLM-4.7 Flash|9GB|128K"
+    "qwen3-coder:latest|Qwen3 Coder|5GB|128K"
+    "qwen3-coder-next:latest|Qwen3 Coder Next (80B MoE)|52GB|256K"
+    "gpt-oss:20b|GPT-OSS 20B|12GB|32K"
+    "nemotron-3-nano:30b|Nemotron-3-Nano 30B|18GB|32K"
+)
+
+VLLM_MODELS=(
+    "cyankiwi/GLM-4.7-Flash-AWQ-4bit|GLM-4.7 Flash AWQ|10GB|19K"
+    "Qwen/Qwen3-8B|Qwen3-8B|16GB|16K"
+    "Qwen/Qwen3-8B-AWQ|Qwen3-8B AWQ|5GB|32K"
+    "Qwen/Qwen2.5-Coder-7B-Instruct|Qwen2.5-Coder 7B|7GB|16K"
+)
+
+select_model() {
+    local -n model_list=$1
+    local default_idx=0
+
+    echo ""
+    echo "Available models ($BACKEND):"
+    echo ""
+    printf "  \033[1m%-4s %-36s %6s  %s\033[0m\n" "#" "Model" "Size" "Context"
+    printf "  %-4s %-36s %6s  %s\n"               "───" "────────────────────────────────────" "──────" "───────"
+
+    for i in "${!model_list[@]}"; do
+        IFS='|' read -r id name size ctx <<< "${model_list[$i]}"
+        local marker=""
+        if [[ $i -eq $default_idx ]]; then
+            marker=" (default)"
+        fi
+        printf "  %-4s %-36s %6s  %s%s\n" "$((i+1))." "$name" "$size" "$ctx" "$marker"
+    done
+
+    echo ""
+    read -rp "Select model [1]: " choice
+    choice="${choice:-1}"
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#model_list[@]} )); then
+        IFS='|' read -r id _ _ _ <<< "${model_list[$((choice-1))]}"
+        MODEL="$id"
+    else
+        echo "Invalid selection, using default."
+        IFS='|' read -r id _ _ _ <<< "${model_list[$default_idx]}"
+        MODEL="$id"
+    fi
+
+    echo "  → $MODEL"
+    echo ""
+}
+
 # ─── Resolve model defaults ─────────────────────────────────────────────────
 if [[ -z "$MODEL" ]]; then
-    case "$BACKEND" in
-        ollama) MODEL="glm-4.7-flash:latest" ;;
-        vllm)   MODEL="Qwen/Qwen3-8B"       ;;
-        *)      echo "Unknown backend: $BACKEND"; exit 1 ;;
-    esac
+    if [[ -t 0 && "$ACTION" != "config" ]]; then
+        # Interactive terminal — prompt user
+        case "$BACKEND" in
+            ollama) select_model OLLAMA_MODELS ;;
+            vllm)   select_model VLLM_MODELS   ;;
+            *)      echo "Unknown backend: $BACKEND"; exit 1 ;;
+        esac
+    else
+        # Non-interactive — use defaults silently
+        case "$BACKEND" in
+            ollama) MODEL="glm-4.7-flash:latest" ;;
+            vllm)   MODEL="Qwen/Qwen3-8B"       ;;
+            *)      echo "Unknown backend: $BACKEND"; exit 1 ;;
+        esac
+    fi
 fi
 
 # ─── Config paths ────────────────────────────────────────────────────────────
@@ -76,6 +139,7 @@ build_ollama_models() {
     case "$id" in
         glm-4.7-flash:*)     name="GLM-4.7 Flash";      ctx=131072 ;;
         qwen3-coder:*)       name="Qwen3 Coder";        ctx=131072 ;;
+        qwen3-coder-next:*)  name="Qwen3 Coder Next";   ctx=262144 ;;
         qwen3:30b*)          name="Qwen 3 30B";          ctx=256000 ;;
         gpt-oss:20b*)        name="GPT-OSS 20B";         ctx=32768  ;;
         nemotron-3-nano:30b*)name="Nemotron-3-Nano 30B"; ctx=32768  ;;

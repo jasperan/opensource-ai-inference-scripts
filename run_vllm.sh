@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Defaults
-MODEL="cyankiwi/GLM-4.7-Flash-AWQ-4bit"
+MODEL=""
+MODEL_SET=false
 PORT=8000
 GPU_UTIL=0.92
 MAX_LEN=19136
@@ -29,7 +30,7 @@ Commands:
   logs       Tail the background vLLM server log
 
 Options:
-  --model <id>       HuggingFace model ID        (default: $MODEL)
+  --model <id>       HuggingFace model ID (skip interactive picker)
   --port <n>         Server port                  (default: $PORT)
   --gpu-util <0-1>   GPU memory utilization       (default: $GPU_UTIL)
   --max-len <n>      Max context length           (default: $MAX_LEN)
@@ -38,8 +39,10 @@ Options:
   --no-thinking      Disable thinking mode
   -h, --help         Show this help
 
+If --model is omitted, an interactive model picker is shown.
+
 Examples:
-  ./run_vllm.sh                          # start server in foreground
+  ./run_vllm.sh                          # Interactive model picker + start server
   ./run_vllm.sh crush                    # start vLLM in background + launch Crush
   ./run_vllm.sh opencode                 # start vLLM in background + launch OpenCode
   ./run_vllm.sh crush --no-thinking      # background vLLM (no thinking) + Crush
@@ -57,7 +60,7 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --model)       MODEL="$2";      shift ;;
+        --model)       MODEL="$2"; MODEL_SET=true; shift ;;
         --port)        PORT="$2";       shift ;;
         --gpu-util)    GPU_UTIL="$2";   shift ;;
         --max-len)     MAX_LEN="$2";    shift ;;
@@ -69,6 +72,66 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+# --- Interactive model selection ---
+# Each entry: "model_id|display_name|size|context|max_len|tool_parser|reasoning_parser"
+VLLM_MODEL_LIST=(
+    "cyankiwi/GLM-4.7-Flash-AWQ-4bit|GLM-4.7 Flash AWQ|10GB|19K|19136|glm47|glm45"
+    "Qwen/Qwen3-8B|Qwen3-8B|16GB|16K|16384|qwen25|deepseek_r1"
+    "Qwen/Qwen3-8B-AWQ|Qwen3-8B AWQ|5GB|32K|32768|qwen25|deepseek_r1"
+    "Qwen/Qwen2.5-Coder-7B-Instruct|Qwen2.5-Coder 7B|7GB|16K|16384|qwen25|deepseek_r1"
+)
+
+select_vllm_model() {
+    local default_idx=0
+
+    echo ""
+    echo "Available vLLM models:"
+    echo ""
+    printf "  \033[1m%-4s %-36s %6s  %s\033[0m\n" "#" "Model" "Size" "Context"
+    printf "  %-4s %-36s %6s  %s\n"               "───" "────────────────────────────────────" "──────" "───────"
+
+    for i in "${!VLLM_MODEL_LIST[@]}"; do
+        IFS='|' read -r id name size ctx _ _ _ <<< "${VLLM_MODEL_LIST[$i]}"
+        local marker=""
+        if [[ $i -eq $default_idx ]]; then
+            marker=" (default)"
+        fi
+        printf "  %-4s %-36s %6s  %s%s\n" "$((i+1))." "$name" "$size" "$ctx" "$marker"
+    done
+
+    echo ""
+    read -rp "Select model [1]: " choice
+    choice="${choice:-1}"
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#VLLM_MODEL_LIST[@]} )); then
+        IFS='|' read -r id _ _ _ max_l tp rp <<< "${VLLM_MODEL_LIST[$((choice-1))]}"
+        MODEL="$id"
+        MAX_LEN="$max_l"
+        TOOL_PARSER="$tp"
+        REASONING_PARSER="$rp"
+    else
+        echo "Invalid selection, using default."
+        IFS='|' read -r id _ _ _ max_l tp rp <<< "${VLLM_MODEL_LIST[$default_idx]}"
+        MODEL="$id"
+        MAX_LEN="$max_l"
+        TOOL_PARSER="$tp"
+        REASONING_PARSER="$rp"
+    fi
+
+    echo "  → $MODEL (context: $MAX_LEN)"
+    echo ""
+}
+
+# Resolve model: interactive prompt or default
+if [[ -z "$MODEL" ]]; then
+    if [[ -t 0 ]]; then
+        select_vllm_model
+    else
+        # Non-interactive — use default silently
+        MODEL="cyankiwi/GLM-4.7-Flash-AWQ-4bit"
+    fi
+fi
 
 # --- Build vLLM args (shared by foreground and background) ---
 build_vllm_args() {
